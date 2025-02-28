@@ -1,4 +1,4 @@
-package main
+package ch5
 
 import "fmt"
 
@@ -66,6 +66,7 @@ func getExpenseReport(e expense) (string, float64) {
 
 // #CH5.11 - Verbesserung mit type switch
 func getExpenseReport(e expense) (string, float64) {
+/* my solution
 	switch e.(type) {
 	case email:
 		m, _ := e.(email)
@@ -75,6 +76,15 @@ func getExpenseReport(e expense) (string, float64) {
 		return s.toPhoneNumber, s.cost()
 	default:
 		return "", 0.0
+	}
+*/
+	switch v := e.(type) {
+	  case email:
+		  return v.toAddress,v.cost()
+		case sms:
+			return v.toPhoneNumber,v.cost()
+		default:
+			return "",0.0
 	}
 }
 // don't touch below this line

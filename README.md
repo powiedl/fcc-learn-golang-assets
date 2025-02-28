@@ -55,6 +55,10 @@ Go Programme müssen kompiliert werden. Dazu verwendet man den Befehl `go`: `go 
 
 Das bedeutet, dass der Typ von Variablen bzw. Werten zur Entwicklungszeit feststeht. Das hat den Vorteil, dass der Editor während der Entwicklung auf Typfehler prüfen kann und diese nicht erst zur Laufzeit auffallen. Der "Nachteil" ist, dass es "mühsamer" wird Programme zu schreiben, weil man nicht zwischen verschiedenen Typen für ein und dieselbe Variable wechseln kann (aber dieses "mühsame" zahlt sich im Normalfall recht schnell aus!).
 
+Außerdem ist Go stark typisiert, d. h. es finden keine automatischen Typumwandlungen durch den Compiler statt - man kann also nicht ein int und ein float addieren, sondern man muss explizit einen der beiden Werte in den Typ des anderen umwandeln.
+
+Und auch wenn man konstante Werte angibt haben sie einen bestimmten Typ (**3** ist vom Typ `int`, **3.0** vom Typ `float64`). Eine "Ausnahme" ist **0**, das kann sowohl ein `int` als auch ein `float64` sein.
+
 ## Verbinden von Strings
 
 Wie in vielen anderen Programmiersprachen auch, kann man in Go strings mit dem `+` aneinanderfügen. Aber man kann nicht einen string und eine Zahl addieren.
@@ -93,6 +97,12 @@ Eine `if` Anweisung kann auch ein initiales Statement enthalten (mit ; vor der B
 - `<=` kleiner gleich
 - `>=` größer gleich
 
+## logische Operatoren
+
+- `&&` AND (beide Seiten müssen erfüllt sein, damit die gesamte Bedingung erfüllt ist)
+- `||` OR (zumindest eine der beiden Seiten muss erfüllt sein, damit die gesamte Bedingung erfüllt ist)
+- `!` NOT (negiert den Wert der Bedingung)
+
 ## switch
 
 Mit einem `switch` kann man das gleiche wie mit mehreren if - else if - else if - else erreichen. Im Normalfall ist das switch aber besser lesbar.
@@ -130,6 +140,8 @@ Im Gegensatz zu C wird in Go der Typ nachgestellt. Das entspricht eher dem Sprac
 ## Parameterübergabe
 
 In Go werden Parameter by Value übergeben, d. h. es wird eine Kopie des Wert des Parameters übergeben. Das bedeutet, dass Änderungen am Wert eines Parameters in einer Funktion keine Auswirkung auf den Wert außerhalb der Funktion haben. Von dieser Regel gibt es nur wenige Ausnahmen - diese haben wir aber noch nicht kennengelernt.
+
+Wenn man beim Funktionsaufruf nach dem letzten Parameter vor der `)` eine neue Zeile anfängt (damit man die schließende Klammer "schön" formatieren kan, muss man nach dem letzten Parameter ein `,` verwenden).
 
 ## Rückgabewerte von Funktionen ignorieren
 
@@ -422,6 +434,35 @@ Der Interfacetype kann dann als ganz normaler Type verwendet werden (beispielswe
 
 Und es gibt auch - wie bei `struct` ein **empty interface**.
 
+Und man muss auch nicht vor der Verwendung eine Variable/ein Objekt vom passenden Typ erzeugen, man kann das auch direkt beim Aufruf erledigen (man erzeugt ein anonymes Objekt von einem passenden Typ) - wenn man das nachher nicht noch woanders benötigt.
+
+Im folgenden Beispiel nutzt man das beim Aufruf von printArea in main.
+
+```golang
+type shape interface {
+  area() float64
+}
+
+type rect struct {
+  width float64
+  height float64
+}
+func (r rect) area() float64 {
+  return r.height * r.width
+}
+
+func printArea(s shape) {
+  fmt.Printf("The area of the shape is %v\n",s.area())
+}
+
+func main() {
+  printArea(rect{
+    width:12.4,
+    height:4.3,
+  })
+}
+```
+
 ## Named Parameters
 
 Bei interfaces ist es noch wichtiger, dass man Parametern (und die return values) mit Namen versieht, damit jemand, der ein Interface implementiert weiß, wofür die jeweiligen Dinge gedacht sind.
@@ -486,4 +527,162 @@ Es ist wichtig seine Interface klar (und übersichtlich) zu halten. Das kann seh
 
 1. **Interfaces sollen so klein wie möglich sein**: Sie sollen das minimal notwendige Verhalten darstellen, dass notwendig ist um eine Idee oder ein Konzept zu repräsentieren.
 2. **Interfaces sollen kein Wissen über die implementierenden Typen benötigen**: Sie stellen dar, was jemand mitbringen muss, um als Typ des Interfaces zu gelten. Sie sollen über diesen Jemand nichts wissen müssen.
-3. **Interfaces sind keine Klassen**: Sie haben keine Konstruktoren oder Destructoren, sie behandeln keine Daten (sie schreiben nur vor, wie man mit etwas, dass das Interface implementiert, kommunizieren kann bzw. muss). Sie kümmern sich auch nur um das "was" und nicht um das "wie".
+3. **Interfaces sind keine Klassen**: Sie haben keine Konstruktoren oder Destructoren, sie behandeln keine Daten (sie schreiben nur vor, wie man mit etwas, dass das Interface implementiert, kommunizieren kann bzw. muss). Interfaces kümmern sich nicht um das erreichte Verhalten, sie legen nur fest, wie etwas aussehen muss, damit man es als "zu diesem Interface passend" betrachten kann.
+
+# Kapitel 6: Errors
+
+In Go werden Fehler als `error` Werte ausgedrückt. Ein `error` ist dabei alles, was das built-in `error` interface implementiert:
+
+```golang
+type error interface {
+  Error() string
+}
+```
+
+D. h. ein `error` muss nur eine Voraussetzung erfüllen. Er muss eine Methode Error haben, die keinen Parameter entgegennimmt und einen `string` zurückliefert.
+
+Wenn etwas in einer Funktion fehlschlagen kann sollte sie als letzten Returnvalue immer ein error zurückliefern. Und der aufrufende Code sollte in so einem Fall immer prüfen, ob ein error oder `nil` (=kein Fehler aufgetreten) zurückgegeben wurde.
+
+```golang
+import "errors"
+
+func doSomething(p int) (int,error) {
+  if p % 2 == 1 { return 1,errors.New("p ist ungerade!") }
+  return 0, nil
+}
+```
+
+In dem Beispiel verwendet man einen Standardfehler aus dem Package errors. Er wird mit der Methode New erzeugt, welche einen Parameter als String - eben die Feherlmeldung - erwartet.
+
+## eigene Fehler
+
+Da `error` "nur" ein Interface ist kann man seine eigenen Fehlerobjekte erstellen (diese müssen nur eine Methode `Error() string` implementieren).
+
+```golang
+type userError struct {
+    name string
+}
+
+func (e userError) Error() string {
+    return fmt.Sprintf("%v has a problem with their account", e.name)
+}
+
+func sendSMS(msg, userName string) error {
+    if !canSendToUser(userName) { // diese "Prüffunktion" ist in diesem Beispiel nicht implementiert ("sie kommt aus einer Library")
+        return userError{name: userName}
+    }
+    // ...
+}
+```
+
+## panic
+
+`panic` ist eine andere Art von Fehler bzw. mit Fehlern umzugehen. `panic` ist eine Funktion in Go. Wenn sie aufgerufen wird, bricht das Programm ab und gibt den Stacktrace aus - mit folgender Ausnahme:
+
+Im Allgemeinen sollte man `panic` nicht verwenden.
+
+Wenn zumindest eine Funktion im Stacktrace in einem `defer` die Funktion `recover()` aufruft, bricht das Programm nicht ab.
+
+Und nach Ansicht des Kursleiters sollte man `recover()` noch weniger verwenden.
+
+Seine Empfehlung:
+
+- "Normale" Fehler sollten mit dem error Return behandelt werden (die aufrufende Funktion muss den error wie "jeden anderen" Rückgabewert behandeln).
+- Wenn etwas auftritt, was man nicht behandeln kann, sollte ein `log.Fatal` verwendet werden, um eine Meldung auszugeben und anschließend sollte das Programm beendet werden.
+
+# Kapitel 7: Loops (for)
+
+In Go gibt es nur eine `for` loop. Sie hat folgenden prinzipiellen Aufbau:
+
+```golang
+for INITIAL; CONDITION; AFTER {
+  // eigentliche loop
+}
+```
+
+INITIAL wird dabei initial einmal vor dem ersten Lauf der eigentlichen Loop ausgeführt. Dieser Schritt dient dazu gegebenenfalls Variablen zu initialisieren.
+CONDITION wird **vor** jedem Schleifendurchlauf geprüft (aber **nach** dem Initialisieren), d. h. wenn die Bedingung am Anfang nicht erfüllt ist, wird die Schleife nie durchlaufen. Wenn in INITIAL Werte aus dem übergeordneten Block verändert werden, findet diese Veränderung auch statt, wenn die CONDITION nicht erfüllt ist.
+AFTER wird **nach** jedem Schleifendurchlauf durchgeführt, das wird normalerweise verwendet um eine Zählvariable zu erhöhen oder zum nächsten Element in einer Liste zu gehen.
+
+Es müssen aber nicht alle Teile angegeben werden - wenn beispielsweise CONDITION nicht angegeben ist hat man eine Endlosschleife produziert (sofern nicht im Schleifenkörper selbst die Schleife abgebrochen wird - z. b. mit `return` in einer `func`)
+
+## while Schleife
+
+Wie bereits festgestellt hat Go nur das Keyword `for` um eine Schleife zu schreiben. Eine Schleife, die sich wie eine sonst übliche while Schleife verhält, erreicht man dadurch, dass man der `for` Schleife nur eine CONDITION mitgibt. In diesem Fall darf man die `;` **nicht** schreiben (wenn man es doch tut, bekommt man einen Compilerfehler).
+
+## "normalen" Schleifenlauf verändern
+
+Man kann (in einer Funktion) nicht nur return dazu verwenden, um den Schleifenlauf zu verändern, sondern man kann auch `continue` und `break` verwenden. `continue` bricht den aktuellen, eigentlichen Loop ab und fährt mit der AFTER Anweisung fort. Das wird oft für **guard clauses** vewendet. `break` beendet die aktuelle Iteration und verlässt die gesamte Schleife, d. h. auch nachfolgende Iterationen werden nicht mehr ausgeführt. Das kann vor allem bei einer "**while**" Schleife praktisch sein.
+
+# Kapitel 8: Slices
+
+Arrays in Go sind eine fixe Anzahl von Elementen des gleichen Typs. Zur Anlage des Arrays muss die Anzahl der Elemente bekannt sein und kann sich nachträglich nicht mehr ändern. Bei Arrays wird die Anzahl der Elemente in [] dem Typ vorangestellt `[5]int` bezeichnet also ein Array, dass aus genau 5 `int` besteht.
+
+Wenn man die Elemente dann auch gleich initialisieren will, geschieht dies wieder mit folgenden geschwungenen Klammern `{ }`. Die Elemente innerhalb dieser Klammern werden durch Beistriche `,` getrennt.
+
+`primes := [6]int{2,3,5,7,11,13}`
+
+Der größte Nachteil von `array`s in Go ist, dass sie eine fixe, unveränderliche Größe haben. Daher wird man fast immer stattdessen mit `slices` arbeiten.
+
+Ein `slice` ist eine flexible Ansicht mit einer dynamischen Größe auf ein `array`. Man kann ein slice aus einem Array erstellen. Dabei gibt man den ersten und den letzten Index an, der enthalten sein soll. Dabei ist der letzte Index "gerade" **\*nicht** mehr enthalten\*!
+
+```golang
+primes := [6]int{2,3,5,7,11,13}
+mySlice := primes[1:4] // ergibt [3, 5, 7]
+```
+
+Die generelle Syntax lautet `arrayname[ersterIndexEnthalten:letzterIndexNichtEnthalten]`. Sowohl ersterIndexEnthalten als auch letzerIndexNichtEnthalten kann weggelassen werden. Wenn der erste Index weggelassen wird, beginnt der slice beim ersten Element, wenn der zweite Index weggelassen wird, endet der slice nach dem letzten Element (in dem Fall ist also das letzte Element im Array noch im slice enthalten). Wenn beide Indizes weggelassen werden `[:]` umfasst der Slice also das gesamte Array.
+
+Wenn man ein Slice einem anderen zuweist, verweisen beide auf das gleiche zugrundeliegende Array. Damit führt eine Änderung der Werte in einem Slice zur gleichen Änderung im anderen slice. In Wahrheit wird das zugrundeliegende Array verändert - und beide slices schauen auf das gleiche Array!
+
+Auch wenn man einer Funktion ein Slice als Parameter übergibt und diese Funktion den slice verändert, wird das zugrundeliegende Array verändert. Und ein Slice wird scheinbar nicht als call by value (wie es "normal" in Go ist), sondern als call by ref übergeben, d. h. die Änderung an dem Slice bzw. dem zugrundeliegenden Array ist nach der Funktion immer noch "sichtbar" bzw. existent!
+
+## make Funktion
+
+Diese wird normalerweise für die Erzeugung eines slices verwendet - das "aus einem Array" schneiden ist die Ausnahme, weil Arrays schon die Ausnahme sind.
+
+Die Funktion make hat dabei folgende Signatur: `func make([]T,len int,cap int) []T`, `len` ist dabei die initiale Länge des Slice und `cap` die Kapazität. Wobei die Kapazität nicht starr ist, sondern sich ändern kann. Wenn man an die Kapazitätsgrenze stößt erstellt Go automatisch ein neues Slice, dass eine doppelt so große Kapazität hat wie das aktuelle Slice. Daher kann man die Kapazität auch weglassen - in dem Fall wird sie gleich der Länge gesetzt, d. h. wenn nur ein Element dazu kommt muss Go das ganze Slice kopieren. Daher kann es trotzdem sinnvoll sein, eine Kapazität anzugeben (wenn man weiß/vermutet, wie groß das Slice "am Ende" sein wird).
+
+Um beispielsweise ein Slice mit int zu erzeugen ist folgender Aufruf notwendig: `make([]int,5,10)`.
+
+`make` füllt die Elemente mit dem **zero value** des Typs.
+
+Um das Slice mit bestimmten Werten zu initialisieren, kann man ein slice literal verwenden. Nach der Initialisierung ist es aber dann ein ganz normales slices `mySlice:=[]string{"one","two","three"}`
+
+## Länge und Kapazität eines slice
+
+Die Länge eines Slice kann man mit der Funktion `len()` ermitteln und die Kapazität mit der Funktion `cap()`.
+
+## variadic
+
+Viele Funktionen können eine willkürliche Anzahl an Parametern für ihren letzten Parameter annehmen. Das wird vor allem von Funktionen in Standardbibliotheken oft verwendet. In der Funktionssignatur kennzeichnet man das mit `...` vor dem Typ, z. b. `func concat (strs ...string) string {}`. Diese Funktion nimmt eine beliebige Anzahl an strings entgegen und liefert einen einzigen string als Ergebnis zurück.
+
+## Spread Operator
+
+Der Spread Operator (ebenfalls mit `...` geschrieben - er kommt aber **NACH** dem zu spreadenden Objekt - oft ein slice) erzeugt aus dem Slice eben für jedes Element im Slice einen eigenen Wert. Man kann ein int slice **nicht** an eine Funktion als Parameter übergeben, die sich ...int als Parameter erwartet, aber man kann slice... an diese Stelle übergeben (wenn der slice den Namen slice hat).
+
+## append Funktion
+
+Die append Funktion wird verwendet um dynamisch Elemente zu einem slice hinzuzufügen. `func append(slice []Type, elems ...Type)` []Type`. Die append Funktion hat also als ersten Parameter einen slice von einem bestimmten Typ und danach beliebig viele einzelne Werte mit diesem Typ. Und die Funktion liefert wiederum ein slice von diesem Typ zurück.
+
+Wenn das zugrundeliegende Array nicht groß genug ist, wird ein neues, größeres Array erstellt und der returnierte slice zeigt auf dieses neue Array. Wenn das zugrundeliegende Array groß genug ist, werden die Elemente im bestehenden Array angefügt (in diesem Fall sieht man sie auch im als Parameter übergebenen slice!). Will man also sicherstellen, dass das übergebene Slice unverändert bleibt muss man es davor selbst kopieren! Das geht am einfachsten, indem man an ein leeres Slice das zu kopierende slice appended: `neu:=append([]int{},bestehendesSlice...)`.
+
+Da die Funktion append einerseits das zugrundeliegende Array verändert und andererseits ein neues slice zurückgibt, sollte man append nur auf "sich selbst" anwenden, d. h. `someSlice = append(otherSlice, element)` sollte man vermeiden!
+
+## range
+
+`range` stellt eine Vereinfachung dar, wenn man in einem for über alle Elemente eines slice iterieren will:
+
+```golang
+for INDEX, ELEMENT := range SLICE {
+
+}
+```
+
+ELEMENT ist dann das jeweilige Element aus dem slice SLICE. INDEX ist der Index dieses Elements (beginnt bei 0). Wenn man für den INDEX keine Verwendung hat, verwendet man einfach den blank operator `_` statt dessen.
+
+## slice of slices
+
+Slices können andere slices enthalten - wodurch man eine 2d slice erzeugen kann.
+
+rows := [][]int{}
