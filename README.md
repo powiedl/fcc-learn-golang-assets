@@ -254,3 +254,236 @@ func main() {
   fmt.Println(f("Powidl")) // Ergibt ebenfalls "Hallo Welt von Powidl"
 }
 ```
+
+# Kapitel 4: structs
+
+`structs` werden zur Repräsentation von strukturierten Daten verwendet.
+
+## Definition von structs
+
+```golang
+type car struct {
+  brand string
+  model string
+  doors int
+  mileage int
+}
+```
+
+Die Definition wird mit dem Schlüsselwort `type` eingeleitet, dann folgt der Name des structs gefolgt von `struct` (`struct`) ist also selbst ein Datentyp. Dann gefolgt in geschwungenen Klammern die einzelnen Elemente, die das struct umfasst.
+
+Und weil struct selbst ein Datentyp ist, kann man sie auch ineinander verschachteln.
+
+```golang
+type car struct {
+  brand string
+  model string
+  doors int
+  mileage int
+  frontWheel wheel
+  backWheel wheel
+}
+
+type wheel struct {
+  radius int
+  material string
+}
+```
+
+## Erzeugen von Variablen mit einem bestimmten struct Typ
+
+Entweder verwendet man `var audi car` um die Variable audi vom Typ car zu definieren - oder in einer Funktion `audi := car{}`.
+
+## Zugriff auf Elemente des struct
+
+Auf die einzelnen Elemente des struct wird dann mittels . zugegriffen, z. b. `audi.brand = "Audi"`.
+
+## Anonyme structs
+
+Man kann ein struct auch definieren ohne dass man ihm einen Namen gibt, dann kann man diesen struct Typ an keiner anderen Stelle ansprechen. Um diesen struct mit Werten zu befüllen, kann man eine zweite geschwungene Klammer (nach der Festlegung der Typen der Elemente) mit den jeweiligen Werten der Elemente für diese konkrete Variable verwenden:
+
+```golang
+myCar := struct {
+  brand string
+  model string
+} {
+  brand: "Toyota",
+  model: "Camry",
+}
+```
+
+**Wichtig**: Nach dem letzten Element in der "Zuweisungs-{}" muss ebenfalls ein `,` stehen (was in der Powershell einen Fehler auslösen würde, bei Javascript erlaubt ist, ist bei Go verpflichtend - es kommt ein Compilerfehler, wenn das nicht gemacht wird).
+
+Diese Form der Wertinitialisierung kann man genauso bei benannten structs verwenden, dann sind die leeren {} eben nicht leer sondern darin belegt man die einzelnen Elemente mit den Startwerten.
+
+Generell sind benannte structs zu bevorzugen, es kann aber Sinn machen anonyme structs zu verwenden - wenn man zum Ausdruck bringen will, dass dieser struct an keiner anderen Stelle verwendet werden soll.
+
+## embedded structs
+
+Go ist keine objektorientierte Sprache. Mit embedded structs kann man aber zumindest Attribute zwischen verschiedenen structs teilen.
+
+```golang
+type truck struct {
+  car
+  bedSize int
+}
+```
+
+Damit "erbt" das struct truck alle Elemente von car und hat zusätzlich noch ein Element bedSize. Das ist etwas anderes wie wheel (innerhalb von car). car hat ein bzw. zwei wheels (frontWheel und backWheel), während `truck` ein `car` **ist**. In objektorientierten Sprachen spricht man auch von **has a** (wheel) und **is a** (truck).
+
+Wobei man bei den geerbeten Elementen zwischen der Initialisierung und dem Zugriff unterscheiden muss. Bei der Initialisierung muss man über das "Basiselement" gehen, beim Zugriff kann man auf die "geerbten" Elemente ohne "Zwischenschritt" zugreifen.
+
+Die Initialisierung von einem truck könnte so aussehen
+
+```golang
+m18:=truck{
+  car: car{
+    brand:"Steyr",
+    model:"M18",
+    doors:4,
+    mileage:0,
+    frontWheel:wheel{
+      radius:35,
+      material:"gum",
+    },
+  },
+  bedSize:0,
+}
+```
+
+Und der Zugriff dann so: `fmt.Printf("Der Truck hat eine Bedsize von %v und hat %v Türen",m18.bedSize,m18.doors).`. Der Zugriff auf doors (aus car) ist auch über `m18.car.doors` möglich (das kann interessant sein, wenn man in Truck direkt auch eine Eigenschaft doors definiert - wobei man sich solche Dinge sehr genau überlegen sollte, weil es den Code nicht gerade "verständlich" macht).
+
+## Methoden
+
+Obwohl Go nicht objektorientiert ist, hat es Methoden. Methoden sind spezielle Funktionen (mit einem zusätzlichen "Parameter" - dem `receiver`). Der `receiver` wird bei der Deklaration vor dem Funktionsnamen (bzw. nach dem Schlüsselwort func geschrieben) - und zwar ebenfalls in runden Klammern Name Typ:
+
+Im folgenden Beispiel wird die Methode area für den Typ rect erstellt:
+
+```golang
+type rect struct {
+  width int
+  height int
+}
+
+func (r rect) area() int {
+  return r.width*r.height
+}
+
+var r=rect{
+  width:3,
+  height:7,
+}
+func main() {
+  fmt.Printf("Die Fläche des rect %v x %v ist %v\n",r.width,r.height,r.area()); // Ergibt "Die Fläche des rect 3 x 7 ist 21"
+}
+```
+
+## Memory Layout
+
+Ein struct liegt als zusammenhängender Block im Speicher. Man nutzt den Speicher "optimal" wenn man die Elemente eines structs nach ihrer Speichergröße deklariert (vom größten zum kleinsten). Im Normalfall muss man sich aber nicht allzu viele Gedanken darüber machen, aber bei großen Arrays mit vielen Elementen, die alle structs sind, kann es einen nennenswerten Einfluss auf den Speicherbedarf und auch auf die Ausführungsgeschwindigkeit haben. Wobei mittlerweile der Go Compiler intelligenter zu sein scheint, aber man kann mit der unterschiedlichen Reihenfolge immer noch "deutliche" Unterschiede im Platzbedarf erzeugen.
+
+Eine Möglichkeit den Platzbedarf eines Objekts im Speicher zu messen bietet das Package `reflect`: `reflect.Type(truck{}).Size()` - liefert die Größe eines leeren truck structs im Speicher.
+
+## Empty struct
+
+Ein empty struct ist der kleinstmögliche Typ in Go. Er belegt 0 Bytes Memory. Er wird wie folgt definiert (einmal als anonymer struct und einmal als Typ emptyStruct):`
+
+```golang
+// anonymous empty struct type
+empty := struct{}{}
+
+// named empty struct type
+type emptyStruct struct{}
+empty := emptyStruct{}
+```
+
+# Kapitel 5: interfaces
+
+Interfaces erlauben es sich darauf zu konzentrieren, welche Methoden ein Typ zur Verfügung stellt (und nicht wie er genau gebaut ist). In Go bestehen interfaces nur aus Methoden, nicht auch aus Attributen. Und ein Typ implementiert ein interface, wenn er alle Methoden des Interfaces mit den richtigen Parameter- und Rückgabetypen hat. Ein Interface in Go ist daher eine Sammlung von Methoden. Und ein Typ kann beliebig viele Interfaces "gleichzeitig" implementieren.
+
+Der zero-value von interfaces ist `nil` (und weil `error` in Go ein Interface ist, checkt man auf das "Nichtvorliegen" eines Fehlers indem man den error mit `nil` vergleicht).
+
+## Definition
+
+```golang
+type interfacename interface {
+  methode(parameterliste) returntyp
+  methode(parameterliste) returntyp
+}
+```
+
+## Implementierung
+
+Interfaces werden nicht explizit implementiert (d. h. man gibt bei einem Typ nicht an, dass er ein interface implementiert). Das passiert automatisch - wenn ein Typ alle Voraussetzungen eines Interfaces erfüllt hat er dieses Interface implementiert.
+
+## Verwendung
+
+Der Interfacetype kann dann als ganz normaler Type verwendet werden (beispielsweise in der Parameter- oder Rückgabedefinition von Funktionen).
+
+Und es gibt auch - wie bei `struct` ein **empty interface**.
+
+## Named Parameters
+
+Bei interfaces ist es noch wichtiger, dass man Parametern (und die return values) mit Namen versieht, damit jemand, der ein Interface implementiert weiß, wofür die jeweiligen Dinge gedacht sind.
+
+## Type assertions
+
+Manchmal will/muss man (bei interfaces) auf den "zugrundeliegenden" Typ zugreifen. Dazu kann man Type assertions verwenden.
+
+```golang
+type shape interface {
+	area() float64
+}
+
+type circle struct {
+	radius float64
+}
+
+c, ok := s.(circle)
+if !ok {
+	// log an error if s isn't a circle
+	log.Fatal("s is not a circle")
+}
+
+radius := c.radius
+```
+
+Die Type assertion im obigen Code ist das `.(circle)`. Man kann sich die Type assertion als "spezielle" Methode vorstellen (die keinen Namen hat) und als Parameter den Typ hat, auf den geprüft werden soll. Sie hat zwei Rückgaben. Als erstes das gecastete Objekt, als zweites ein boolean, dass angibt ob das casting erfolgreich war. Im Beispiel oben ist c am Ende ein circle, wenn s ein circle war. **ACHTUNG**: Wenn s kein circle (sondern ein anderes shape) war, ist c trotzdem vom Typ circle! D. h. man muss selbst auf den zweiten Parameter prüfen und dementsprechend richtig reagieren!
+
+## Type switches
+
+Type switches sind normale switch Statements, aber der Fall wird aufgrund von Typen unterschieden.
+
+```golang
+func printNumericValue(num interface{}) {
+	switch v := num.(type) {
+	case int:
+		fmt.Printf("%T\n", v)
+	case string:
+		fmt.Printf("%T\n", v)
+	default:
+		fmt.Printf("%T\n", v)
+	}
+}
+
+func main() {
+	printNumericValue(1)
+	// prints "int"
+
+	printNumericValue("1")
+	// prints "string"
+
+	printNumericValue(struct{}{})
+	// prints "struct {}"
+}
+```
+
+Wenn man den Typ selbst nicht als Variable braucht (Wir brauchen ihn im obigen Beispiel, damit wir ihn ausgeben können), kann man die erste Zeile auch so schreiben `switch num.(type) {`.
+
+## Clean interfaces
+
+Es ist wichtig seine Interface klar (und übersichtlich) zu halten. Das kann sehr schnell sehr schwer werden. Hier sind ein paar Grundregeln, denen man nach Möglichkeit folgen sollte:
+
+1. **Interfaces sollen so klein wie möglich sein**: Sie sollen das minimal notwendige Verhalten darstellen, dass notwendig ist um eine Idee oder ein Konzept zu repräsentieren.
+2. **Interfaces sollen kein Wissen über die implementierenden Typen benötigen**: Sie stellen dar, was jemand mitbringen muss, um als Typ des Interfaces zu gelten. Sie sollen über diesen Jemand nichts wissen müssen.
+3. **Interfaces sind keine Klassen**: Sie haben keine Konstruktoren oder Destructoren, sie behandeln keine Daten (sie schreiben nur vor, wie man mit etwas, dass das Interface implementiert, kommunizieren kann bzw. muss). Sie kümmern sich auch nur um das "was" und nicht um das "wie".
