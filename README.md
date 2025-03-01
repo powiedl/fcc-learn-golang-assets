@@ -267,6 +267,16 @@ func main() {
 }
 ```
 
+## Higher order function
+
+Darunter versteht man eine Funktion, die als Parameter eine Funktion entgegen nimmt. Im Normalfall wird diese Parameterfunktion, dann in der eigentlichen Funktion irgendwie aufgerufen.
+
+Die "Parameter"funktion wird als **first-class Function** bezeichnet. Das heißt die Higher order function nimmt eine first-class function entgegen und führt sie zu einem späteren Zeitpunkt aus.
+
+Die eigentliche Funktion muss keine Ahnung haben, was die übergebene Funktion macht. Die übergebene Funktion muss nur die richtige Signatur haben. Und es ist im Prinzip vergleichbar mit Callback-Funktionen in Javascript.
+
+Ein häufiger Anwendungsfall sind jegliche Eventhandler. Da will man, dass der angegebene Code nicht sofort läuft, sondern wenn in der Zukunft irgendetwas bestimmtes passiert.
+
 # Kapitel 4: structs
 
 `structs` werden zur Repräsentation von strukturierten Daten verwendet.
@@ -635,7 +645,9 @@ Die generelle Syntax lautet `arrayname[ersterIndexEnthalten:letzterIndexNichtEnt
 
 Wenn man ein Slice einem anderen zuweist, verweisen beide auf das gleiche zugrundeliegende Array. Damit führt eine Änderung der Werte in einem Slice zur gleichen Änderung im anderen slice. In Wahrheit wird das zugrundeliegende Array verändert - und beide slices schauen auf das gleiche Array!
 
-Auch wenn man einer Funktion ein Slice als Parameter übergibt und diese Funktion den slice verändert, wird das zugrundeliegende Array verändert. Und ein Slice wird scheinbar nicht als call by value (wie es "normal" in Go ist), sondern als call by ref übergeben, d. h. die Änderung an dem Slice bzw. dem zugrundeliegenden Array ist nach der Funktion immer noch "sichtbar" bzw. existent!
+Weil slices nur eine "Ansicht" auf das zugrundeliegende Array sind, sind sie Referenzen. Daher ist es auch so, wenn man einer Funktion ein Slice als Parameter übergibt und diese Funktion den slice verändert, wird das zugrundeliegende Array verändert. Und die Änderung an dem Slice bzw. dem zugrundeliegenden Array ist nach der Funktion immer noch "sichtbar" bzw. existent!
+
+Der **zero value** eines slice ist `nil`.
 
 ## make Funktion
 
@@ -655,7 +667,7 @@ Die Länge eines Slice kann man mit der Funktion `len()` ermitteln und die Kapaz
 
 ## variadic
 
-Viele Funktionen können eine willkürliche Anzahl an Parametern für ihren letzten Parameter annehmen. Das wird vor allem von Funktionen in Standardbibliotheken oft verwendet. In der Funktionssignatur kennzeichnet man das mit `...` vor dem Typ, z. b. `func concat (strs ...string) string {}`. Diese Funktion nimmt eine beliebige Anzahl an strings entgegen und liefert einen einzigen string als Ergebnis zurück.
+Viele Funktionen können eine willkürliche Anzahl an Parametern für ihren letzten Parameter annehmen. Das wird vor allem von Funktionen in Standardbibliotheken oft verwendet. In der Funktionssignatur kennzeichnet man das mit `...` vor dem Typ, z. b. `func concat (strs ...string) string {}`. Diese Funktion nimmt eine beliebige Anzahl an strings entgegen und liefert einen einzigen string als Ergebnis zurück. In der Funktion selbst ist strs dann ein `slice` (von `string`s). Der Unterschied ist auf der Seite des Funktionsaufrufers - er übergibt eine variable Anzahl von `string`s (aber eben kein slice von `string`s).
 
 ## Spread Operator
 
@@ -667,11 +679,11 @@ Die append Funktion wird verwendet um dynamisch Elemente zu einem slice hinzuzuf
 
 Wenn das zugrundeliegende Array nicht groß genug ist, wird ein neues, größeres Array erstellt und der returnierte slice zeigt auf dieses neue Array. Wenn das zugrundeliegende Array groß genug ist, werden die Elemente im bestehenden Array angefügt (in diesem Fall sieht man sie auch im als Parameter übergebenen slice!). Will man also sicherstellen, dass das übergebene Slice unverändert bleibt muss man es davor selbst kopieren! Das geht am einfachsten, indem man an ein leeres Slice das zu kopierende slice appended: `neu:=append([]int{},bestehendesSlice...)`.
 
-Da die Funktion append einerseits das zugrundeliegende Array verändert und andererseits ein neues slice zurückgibt, sollte man append nur auf "sich selbst" anwenden, d. h. `someSlice = append(otherSlice, element)` sollte man vermeiden!
+Da die Funktion append einerseits das zugrundeliegende Array verändert und andererseits ein neues slice zurückgibt, sollte man append nur auf "sich selbst" anwenden, d. h. `someSlice = append(otherSlice, element)` sollte man vermeiden! (das "verbietet" damit den Trick aus dem vorigen Absatz - aber das Kopieren eines slice in ein anderes kann trotzdem interessant sein)
 
 ## range
 
-`range` stellt eine Vereinfachung dar, wenn man in einem for über alle Elemente eines slice iterieren will:
+`range` stellt eine Vereinfachung dar, wenn man in einem `for` über alle Elemente eines `slice` iterieren will:
 
 ```golang
 for INDEX, ELEMENT := range SLICE {
@@ -686,3 +698,219 @@ ELEMENT ist dann das jeweilige Element aus dem slice SLICE. INDEX ist der Index 
 Slices können andere slices enthalten - wodurch man eine 2d slice erzeugen kann.
 
 rows := [][]int{}
+
+## Currying
+
+Funktions currying ist ein Konzept aus der funktionalen Programmierung. Es erlaubt es, eine Funktion mit mehreren Parametern in eine Serie von Funktions mit jeweils nur einem Parameter "umzuwandeln".
+
+Ein Beispiel in Go:
+
+```golang
+func main() {
+  squareFunc := selfMath(multiply)
+  doubleFunc := selfMath(add)
+
+  fmt.Println(squareFunc(5))
+  // prints 25
+
+  fmt.Println(doubleFunc(5))
+  // prints 10
+}
+
+func multiply(x, y int) int {
+  return x * y
+}
+
+func add(x, y int) int {
+  return x + y
+}
+
+func selfMath(mathFunc func(int, int) int) func (int) int {
+  return func(x int) int {
+    return mathFunc(x, x)
+  }
+}
+```
+
+Die Funktion selfMath nimmt eine Funktion mit zwei Parametern als Parameter entgegen und liefert eine Funktion mit einem Parameter zurück. Die zurückgelieferte Funktion ist die übergebene nur dass der Eingabeparameter (der zurückgelieferten Funktion) für beide Parameter der übergebenen Funktion verwendet wird. Darum wird - wenn man selfMath die add Funktion übergibt eine Verdopplungsfunktion (p + p) zurückgegeben. Wenn man selfMath die multiply Funktion übergibt, wird eine sqr Funktion (p \* p) zurückgegeben.
+
+Allgemeiner gesprochen bezeichnet curryng eine Funktion, die eine Funktion als Parameter entgegennimmt und selbst wieder eine Funktion zurückliefert. Die currying Funktion erweitert quasi die übergebene Funktion.
+
+In Go wird currying beispielsweise oft für Middleware eingesetzt - etwas, was bei jedem Request zusätzlich passieren soll.
+
+# Kapitel 9: Maps
+
+Maps sind vergleichbar mit Objekten in Javascript. Maps stellen eine Sammlung von key-value Paaren dar. In einem Map kann jeder key nur ein einziges Mal vorkommen.
+
+Der **zero value** von Maps ist `nil`.
+
+Maps sind - wie slices - Referenzen auf "darunterliegende" Daten, d. h wenn einer Funktion eine Map übergeben wird und diese ändert die Map, ist diese Änderung auch nach dem Ende der Funktion "gültig" bzw. "vorhanden".
+
+## Erzeugen von Maps
+
+Maps können mit Hilfe der `make` Funktion erstellt werden. Dies sieht ähnlich wie für ein slice aus: `make(map[string]int)` Erstellt ein Map, wo der key Datentyp `string` ist und der value Datentyp `int` ist.
+
+Man kann auch ein Map Literal erstellen: `map[string]int{"John":36,"Mary":21}` (erstellt ein Map, wo der key ein `string` ist und der value ein `int`. Und es werden auch gleich zwei Elemente "John" mit 36 und "Mary" mit 21 angelegt).
+
+## Mutationen von einem Element eines Maps
+
+### Einfügen / Ändern
+
+`m[key] = elem`
+
+### Auslesen eines Elements
+
+`elem = m[key]`
+
+Achtung: Hier bekommt man immer etwas zurück - entweder den Wert des Elements mit dem Key key oder den zero value für den Datentyp von Map.
+
+### Element löschen
+
+`delete(m,key)`
+
+### Prüfen, ob ein key in einem Map vorhanden ist
+
+`elem, ok := m[key]`
+
+Wenn ein Element mit dem Key key vorhanden ist, ist elem dieses Element und ok ist true. Wenn es nicht vorhanden ist, ist elem der zero value der Elemente im Map und ok ist false. Dieses ", ok" hat den Namen **comma ok**.
+
+### Was ändert sich, wenn elem kein Basistyp ist (z. b. ein struct)
+
+Dann scheinen die Dinge unschön zu werden, man kann nämlich ein Attribut des structs nicht einfach mit dot-Notation setzen, sondern man muss einen Umweg gehen:
+
+```golang
+type user struct {
+  name: string
+  age: int
+}
+
+func main() {
+  users := make([string]user)
+  users["John"] = {name:"John",age:27}
+  users["Bob"] = {name:"Bob",age:23}
+
+  // COMPILERFEHLER !
+  // users["Bob"].age = 43
+
+  // korrekt
+  b := users["Bob"]
+  b.age := 43 // nach dieser Anweisung ist das Alter von users["Bob"] immer noch 23
+  users["Bob"] = b
+}
+```
+
+Mit der dotNotation kann man die Werte aus dem Struct nur auslesen (`fmt.Printf("%v Jahre alt\n",users["Bob"].age)` funktioniert und liefert wie erwartet "43 Jahre alt")
+
+## Was darf ein Key in einer map sein?
+
+Als value kann alles in einer map vewendet werden. Für die Keys trifft das nicht zu: **map keys may be of any type that is comparable**. Was sind jetzt Typen die compareable sind? Alles, was mit `==` verglichen werden kann, das sind `boolean`, `numeric`, `string`, `pointer`, `channel`, `interface types` und structs oder arrays, die nur die vorher genannten Typen enthalten. Insbesondere bemerkenswert ist, dass slices, maps und functions **nicht** auf der Liste stehen - und damit als keys für maps nicht verwendet werden können.
+
+Interessant ist, dass ein `struct` als key verwendet werden kann - damit kann man leicht mehrdimensionale Maps erzeugen. Nehmen wir an, wir wollen tracken, wie oft jede Seite auf unserem Server von jedem Land aufgerufen wurde. Das kann man relativ leicht mit einem entsprechenden Map mit einem struct als Key machen:
+
+```golang
+type Key struct {
+  Path, Country string
+}
+
+hits := make(map[Key]int)
+
+hits[Key{"/doc","at"}]++ // wenn jemand aus Österreich die /doc Seite besucht hat - wenn der Eintrag in hits noch nicht vorhanden ist, wird er angelegt
+hits[Key{"/help","de"}]++ // wenn jemand aus Deutschlang die /help Seite besucht hat
+
+fmt.Printf("%v Zugriffe aus Deutschland auf /help",hits[Key{"/help","de"}]) // Gibt die Anzahl der Zugriffe auf die /help Seite aus Deutschland aus
+```
+
+Anmerkung: Mit verschachtelten maps wäre das wesentlich aufwändiger (weil beispielsweise das automatische Anlegen wenn eine neue Seite angesurft wird nicht passieren würde - weil der Aufruf ja wäre diese Seite wurde gerade aus einem bestimmten Land angesurft und dann müsste man sich selbst darum kümmern, ob für die Seite schon eine "äußere" Map vorhanden ist und wenn nicht diese auch selbst anlegen).
+
+# Kapitel 10: Pointer
+
+Ein Pointer ist eine Variable, die die Adresse einer anderen Variable speichert. Ein Pointer wird mit `*` erstellt. `var p *int` - p ist ein Zeiger auf einen int.
+
+Der `&` Operator wiederum liefert die Adresse der Variablen zurück, nicht den Wert selbst.
+
+```golang
+x := 5; // x wird beispielsweise an Adresse 101 gespeichert - in Adresse 101 steht dann 5
+p := &x; // p wird beispielsweise an Adresse 105 gespeichert - und darin steht dann 101
+```
+
+Und wenn man einen Pointer an eine Funktion übergibt (statt dem Wert, der an der Stelle steht, wo der Pointer hinzeigt) und die Funktion den Wert, auf die der Pointer zeigt, ändert - dann ist diese Änderung auch nach dem Ende der Funktion gültig (weil die Funktion keine Kopie des Wertes erhalten hat, sondern einen Verweis auf die eigentliche Adresse).
+
+Um dann (über p) auf den Wert von x zuzugreifen, verwendet man ebenfalls den `*` Operator (**Dereferenzierungsoperator**), d. h. *p liefert im vorigen Beispiel 5. Und wenn man *p = 27 ausführt, wird an die Stelle im Speicher, wo z hinzeigt, 27 geschrieben. Und weil die Variable x diese Stelle im Speicher verwendet, hat sie jetzt auch den Wert 27.
+
+```golang
+func info(i *int) {
+  fmt.Printf("Info %v\n",*i)
+}
+
+z := 17
+info(&z) // ergibt Info 17
+```
+
+## Zeiger auf struct
+
+```golang
+type coord struct {
+  x int
+  y int
+}
+
+func printCoords(p *coord) {
+  fmt.Printf("(%v/%v)\n",(*p).x,(*p).y) // die Klammer rund um *p ist NOTWENDIG, sonst bekommt man einen Compilerfehler, weil scheinbar . einen höheren "Rang" wie * hat
+}
+
+c := coord{x:12,y:-6}
+printCoords(&c) // ergibt (12/-6)
+```
+
+Für Zeiger auf struct gibt es eine "Abkürzung", man muss den * nicht angeben - und kann dann auch die `()` weglassen, d. h. die Zeile in printCoords kann man auch so schreiben: `fmt.Printf("(%v/%v)\n",p.x,p.y)`. Go erkennt, dass p ein Zeiger ist und ergänzt (*p) automatisch - ohne es in den Programmcode zu schreiben.
+
+Die Klammer um _p ist notwendig, weil der . Operator eine höhere Priorität wie der _ Operator hat, d. h. _p.x wird als _(p.x) interpretiert - und das ist nicht zulässig, weil .x kein Pointer ist, sondern ein Wert.
+
+## Leerer Pointer
+
+Man kann einen "leeren" Pointer definieren, also einen Pointer der auf keine Adresse zeigt. In diesem Fall hat der Pointer den Wert `nil`. Diese Zeiger nennt man auch **nil pointer**. Diese sind sehr "gefährlich", wenn man versucht einen nil pointer zu dereferenzieren bricht das Programm mit einer panic ab! Daher sollte man _immer_ bevor man einen Pointer dereferenzieren will prüfen, ob er nicht nil ist.
+
+## Pass by reference
+
+In Go werden nicht zusammengesetzte Typen als **call by value** übergeben, d. h. die Funktion erhält eine Kopie des Parameters und d. h. dass Änderungen an den Werten solcher Parameter innerhalb der Funktion in der Außenwelt "unsichtbar" sind.
+
+Einer der häufigsten Anwendungsfälle von Pointern in Go ist, dass man Parameter **by reference** übergeben will. Damit erhält die Funktion keine Kopie sondern die Adresse der Daten - und wenn sie dann an dieser Adresse Änderungen am Wert vornimmt, bleiben die auch nach ihrer Laufzeit erhalten (und sind somit für die Außenwelt sichtbar).
+
+## Pointer receiver
+
+Ein receiver Typ bei einer Methode kann ein Pointer sein. In dem Fall kann die Methode die Daten im struct verändern. Da dies ein häufiger Anwendungsfall für Methoden ist, sind pointer receiver üblicher als normale receiver.
+
+Wenn man eine Methode aufruft, muss man sich auch keine Gedanken darüber machen, ob sie mit einem normalen oder einem Pointer receiver definiert ist. Man kann immer die Variable direkt verwenden. Der Pointer wird automatisch abgeleitet.
+
+```golang
+type car struct {
+  color string
+}
+
+func (c *car) setColor(color string) {
+  c.color = color
+}
+
+func (c car) dontSetColor(color string) {
+  c.color = color
+  fmt.Printf("color inside of dontSetColor=%v\n",c.color)
+}
+
+func main() {
+  c := car{
+    color: "white",
+  }
+  c.setColor("blue")
+  fmt.Println(c.color) // "blue"
+  c.dontSetColor("red") // "color inside of dontSetColor=red"
+  fmt.Println(c.color) // "blue
+}
+```
+
+Die Methode setColor ändert die Farbe (weil sie einen Pointer Receiver verwendet), die Methode dontSetColor ändert die Farbe nicht dauerhaft (außerhalb der Methode), weil sie einen Value Receiver verwendet. Im Aufruf unterscheiden sich die beiden Methoden aber nicht. Man könnte auch `(&c).setColor("blue")` verwenden - das Ergebnis wäre das gleiche, aber ohne ist es einfacher zu Schreiben und auch zu lesen (daher wird man de facto nie Code finden, der diese längere Form verwendet).
+
+## Pointer Performance
+
+Es ist nicht notwendig/sinnvoll überall Pointer zu verwenden um die Zeit für das Kopieren der Parameter beim Funktionsaufruf einzusparen. Es ist wichtiger klaren, korrekten und wartbaren Code zu schreiben. Wenn man ein Performanceproblem hat, muss man dieses lösen (und ja, da kann es dann sinnvoll/notwendig sein an den richtigen Stellen Pointer zu verwenden - aber andere Dinge sollten zuerst bedacht werden).
+
+Stack vs. Heap - die lokalen Variablen werden im Stack gespeichert, der schneller im Zugriff ist als der Heap (wo die Pointer ins Spiel kommen). Wenn der Wert so groß ist, dass das Kopieren einen Performanceeinfluss hat, kann es tatsächlich zielführend sein in diesem Fall einen Pointer zu verwenden.

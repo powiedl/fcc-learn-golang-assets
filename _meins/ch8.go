@@ -3,6 +3,7 @@ package ch8
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type cost struct {
@@ -32,9 +33,8 @@ func getMessageWithRetries(primary, secondary, tertiary string) ([3]string, [3]i
 // #region CH8.2
 func getMessageWithRetriesForPlan(plan string, messages [3]string) ([]string, error) {
 	if plan == planPro {
-		res := messages[:]
-		fmt.Printf("res=%v\n", res)
 		return messages[:], nil
+		return allMessages, nil
 	}
 	if plan == planFree {
 		return messages[:2], nil
@@ -90,7 +90,121 @@ func createMatrix(rows, cols int) [][]int {
 }
 // #endregion
 
+// #region CH8.C1
+func filterMessages(messages []Message, filterType string) []Message {
+	result := []Message{}
+	for _, el := range messages {
+		if el.Type() == filterType {
+			result = append(result, el)
+		}
+	}
+	return result
+}
+// #endregion
+
+// #region CH8.C2
+func isValidPassword(password string) bool {
+	uppercase, digit := false, false
+	uPassword := strings.ToUpper(password)
+	fmt.Printf("Uppercase Password:%v\n", uPassword)
+	if len(password) < 5 || len(password) > 12 {
+		return false
+	}
+	for i, el := range password {
+		if strings.ContainsRune("0123456789", el) {
+			digit = true
+		} else {
+			// Muss ins else des Ziffernchecks, weil bei einer Ziffer ist der Uppercase string auch gleich!
+			if el == rune(uPassword[i]) {
+				uppercase = true
+			}
+		}
+		if uppercase && digit {
+			return true
+		}
+	}
+	return false
+}
+// #endregion
+
+// #region CH8.C3 - nur die Funktionssignatur war zu korrigieren
+func getFormattedMessages(messages []string, formatter func(string) string) []string {
+	formattedMessages := []string{}
+	for _, message := range messages {
+		formattedMessages = append(formattedMessages, formatter(message))
+	}
+	return formattedMessages
+}
+// #endregion
+
+// #region CH8.C4 - der Rest ist in der Angabe
+func printReports(messages []string) {
+	// ?
+	for _, m := range messages {
+		printCostReport(func(m string) int {
+			return len(m)
+		}, m)
+	}
+}
+// #endregion
+
+// #region CH8.C5
+func tagMessages(messages []sms, tagger func(sms) []string) []sms {
+	result := []sms{}
+	for _, m := range messages {
+		t := tagger(m)
+		result = append(result, sms{id: m.id, content: m.content, tags: t})
+	}
+	return result
+}
+
+func tagger(msg sms) []string {
+	tags := []string{}
+	uMsg := strings.ToUpper(msg.content)
+	if strings.Contains(uMsg, "URGENT") {
+		tags = append(tags, "Urgent")
+	}
+	if strings.Contains(uMsg, "SALE") {
+		tags = append(tags, "Promo")
+	}
+	return tags
+}
+// #endregion
+
+// #region CH8.C6
+func getLogger(formatter func(string, string) string) func(string, string) {
+	return func(first, second string) {
+		s := formatter(first, second)
+		fmt.Print(s)
+	}
+}
+// #endregion
+
+
 func main() {
+	// CH8.C5
+	messages := []sms{
+		{id: "001", content: "Urgent! Last chance to see!"},
+		{id: "002", content: "Big sale on all items!"},
+		{id: "003", content: "Last saLe! So it is urgenT!"},
+		{id: "004", content: "fa era fh lkj2354jkr ajkf er afhjg fghj"},
+	}
+	fmt.Printf("%v\n", tagMessages(messages, tagger))
+
+	// CH8.C2
+	fmt.Printf("true=%v\n", isValidPassword("12345adf%D"))
+	fmt.Printf("false=%v\n", isValidPassword("1234"))
+	fmt.Printf("false=%v\n", isValidPassword("123456aZ7898012"))
+	fmt.Printf("false=%v\n", isValidPassword("fer34afda"))
+	fmt.Printf("false=%v\n", isValidPassword("afsaFASDFD"))	
+	// CH8.C1
+	mm1 := MediaMessage{Sender: "ms1", MediaType: "mmt1", Content: "mc1"}
+	mm2 := MediaMessage{Sender: "ms2", MediaType: "mmt2", Content: "mc2"}
+	tm1 := TextMessage{Sender: "ts", Content: "tc"}
+	lm1 := LinkMessage{Sender: "ls", URL: "lu", Content: "lc"}
+	messages := []Message{mm1, mm2, tm1, lm1}
+	fmt.Printf("%v\n", filterMessages(messages, "link"))
+
 
 	//CH8.14: j and g point to the same underlying array, so g's append overwrote j
 	//CH8.15: The array's cap() is exceeded so a new underlying array is allocated
