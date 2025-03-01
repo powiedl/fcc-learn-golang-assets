@@ -914,3 +914,91 @@ Die Methode setColor ändert die Farbe (weil sie einen Pointer Receiver verwende
 Es ist nicht notwendig/sinnvoll überall Pointer zu verwenden um die Zeit für das Kopieren der Parameter beim Funktionsaufruf einzusparen. Es ist wichtiger klaren, korrekten und wartbaren Code zu schreiben. Wenn man ein Performanceproblem hat, muss man dieses lösen (und ja, da kann es dann sinnvoll/notwendig sein an den richtigen Stellen Pointer zu verwenden - aber andere Dinge sollten zuerst bedacht werden).
 
 Stack vs. Heap - die lokalen Variablen werden im Stack gespeichert, der schneller im Zugriff ist als der Heap (wo die Pointer ins Spiel kommen). Wenn der Wert so groß ist, dass das Kopieren einen Performanceeinfluss hat, kann es tatsächlich zielführend sein in diesem Fall einen Pointer zu verwenden.
+
+# Kapitel 11: Packages
+
+Jedes Go Programm besteht aus Packages. Es hat ein main package. In diesem gibt es eine `func main()`. Diese ist der Einsprungspunkt in das Programm - diese Funktion wird ausgeführt, wenn das Programm gestartet wird. Alle anderen Dateien sind library packages und dürfen **KEIN** main() haben. Aus diesen anderen Dateien werden nur Dinge exportiert - aber nichts wird direkt ausgeführt.
+
+Library packages haben per Konvention den letzen Teil ihres Pfades als Package name.
+
+In einem Verzeichnis darf es nur ein Package geben. Wenn unterschiedliche Dateien in einem Verzeichnis zu unterschiedlichen Packages gehören führt dies zu einem Fehler. Und das gilt sowohl für main als auch library packages.
+
+## Module
+
+Go Programme sind in Packages organisiert. Ein Package ist dabei ein einzelnes Verzeichnis. Alles was in einem Go File in einem Verzeichnis vorhanden ist, ist für alle anderen Go Files im gleichen Verzeichnis sichtbar.
+
+Ein Repository kann ein oder mehrere Module enthalten. Ein Modul ist eine Sammlung von Go Programmen, die gemeinsam released werden. Trotzdem ist es üblich ein Modul pro Repository zu haben.
+
+Ein Modul besteht aus einer go.mod im Rootverzeichnis des Projekts. Es enthält den `module` Pfad, die `go` version und es kann Verweise auf andere benötigte externe Pakete haben.
+
+```golang
+module github.com/powiedl/gocourse/exampleproject
+
+go 1.24.0
+
+require github.com/google/examplepackage v1.3.0
+```
+
+Der Modulpfad gibt dabei auch an, wo man das Modul herunterladen kann (im obigen Beispiel würde go das Modul unter https://github.com/powiedl/gocourse/exampleproject erwarten).
+
+## Go Umgebung
+
+- Im Normalfall hat man viele git repositories auf seinem System (üblicherweise eines pro Projekt)
+- Jeses Repository ist normalerweise ein einzelnes Modul
+- Jedes Repository enthält ein oder mehrere Packages
+- Jedes Package besteht aus einem oder mehreren Go source files in einem einzelnen Verzeichnis. Und in einem Verzeichnis darf es nur ein Package geben.
+
+## GOPATH
+
+Früher hat man die Umgebungsvariable GOPATH verwendet - und darin hat man den Sourcecode in einem Verzeichnis `src` gehabt. Das ist mittlerweile nicht mehr notwendig bzw. üblich.
+
+## Programm initialisieren
+
+Man wechselt in das Verzeichnis, in dem man sein Programm schreiben will. Dort gibt man auf der Kommandozeile den folgenden Befehl ein `go mod init {REMOTE}/{USERNAME}/programmname` {REMOTE} ist dabei der Remote Source Provider (z. b. `github.com`), {USERNAME} der Benutzername dort (z. b. `powiedl`) und programmname eben der Programmname. Sinnvollerweise ist er gleich wie der Verzeichnisname, in dem man sich gerade befindet.
+
+Der Befehl legt an dieser Stelle ein go.mod an (das so aussieht, wie im Punkt [Module](#module) beschrieben.
+
+Außerdem legt man in diesem Verzeichnis ein `main.go` mit folgendem Aufbau an:
+
+```golang
+package main
+
+func main() {
+
+}
+```
+
+Dieses Programm (und natürlich hat man sinnvollerweise auch einen Inhalt in `main()`) kann man dann mit `go run main.go` ausführen.
+
+## Go build
+
+Mit `go build` wird ein ausführbares Programm aus der angegebenen Datei erzeugt. In diese Datei wird alles eingefügt, was man benötigt um das Programm ausführen zu können, das bedeutet, dass es reicht das erzeugte File auf einem anderen Computer (mit "gleichem" Betriebssystem) auszuführen. Man muss sonst nichts zur Verfügung stellen und auf dem anderen Computer muss auch nichts extra installiert werden (oder vorhanden sein).
+
+## Go install
+
+Mit `go install` in dem Repoverzeichnis wird das Programm kompiliert und das Executeable wird im GOBIN directory erstellt (und das GOBIN Directory ist im Normalfall im Pfad enthalten, damit kann man es dann von überall aus ausführen).
+
+## Was ein Package exportiert?
+
+Alles was mit einem Großbuchstaben beginnt, wird von einem Package exportiert, alles andere ist nur privat innerhalb des Packages verfügbar. Man muss also nicht extra irgendo exports oder ähnliches angeben - das wird einzig und allein nach dem ersten Zeichen der Objektname bestimmt.
+
+## Lokales übersteuern von importierten requires
+
+In der `go.mod` des jeweiligen Packages ist auch angegeben, welche Dependencies dieses Package hat. Im Beispiel unter [Module](#module) ist es `github.com/google/examplepackage v1.3.0`. Während der Entwicklung und der Verwendung von eigenen Packages kann es zielführend sein, wenn man den offiziellen Pfad "überschreibt". Dies macht man, indem man vor dem require eine (oder mehrere) replace Anweisungen in `go.mod` einfügt.
+
+```golang
+replace github.com/google/examplepackage v1.3.0 => ../examplepackage
+
+require github.com/google/examplepackage v1.3.0
+```
+
+Damit sagt man dem Go Compiler, dass er statt dem offiziellen examplepackage auf github das Package aus dem "Nachbarverzeichnis" examplepackage verwenden soll.
+
+Das funktioniert allerdings nur in einer lokalen Entwicklungsumgebung.
+
+## Regeln für "saubere" Packages
+
+1. **Hide internal logic**: Man sollte nur die Teile exportieren (mit einem großen Anfangsbuchstaben beginnen lassen), die für die Interaktion mit dem Package absolut notwendig sind. Alles, was das Package darüber hinaus für das eigene Funktionieren benötigt, sollte nicht exportiert werden.
+2. **Don't change APIs**: Die exportierten Teile sollten (von den Signaturen) so stabil wie irgendwie möglich gehalten werden und sollten sich nur in Ausnahmefällen ändern. Für die Verwender des Packages gibt es nichts unangenehmeres, wie wenn sie jedes Mal, wenn sie eine neue Version des Packages verwenden, etwas an ihrer Verwendung des Packages ändern müssen.
+3. **Don't export functions from the main package**: Man soll keine Funktionen aus dem main Package exportieren, weil es keine Library ist.
+4. **Packages shouldn't know about dependents**: So wie ein Interface nichts über die structs wissen soll, die es implementieren soll ein Package nichts über seine Verwender wissen (müssen).
