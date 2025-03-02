@@ -968,7 +968,7 @@ func main() {
 }
 ```
 
-Dieses Programm (und natürlich hat man sinnvollerweise auch einen Inhalt in `main()`) kann man dann mit `go run main.go` ausführen.
+Dieses Programm (und natürlich hat man sinnvollerweise auch einen Inhalt in `main()`) kann man dann mit `go run main.go` ausführen. Dabei wird aber kein Executeable gebaut, sondern es wird nur im Memory das ausführbare Programm erstellt und aufgerufen. Dieses Kommando eignet sich daher in erster Linie nur zum schnellen Testen von kleineren Skripten/Programmen.
 
 ## Go build
 
@@ -981,6 +981,19 @@ Mit `go install` in dem Repoverzeichnis wird das Programm kompiliert und das Exe
 ## Was ein Package exportiert?
 
 Alles was mit einem Großbuchstaben beginnt, wird von einem Package exportiert, alles andere ist nur privat innerhalb des Packages verfügbar. Man muss also nicht extra irgendo exports oder ähnliches angeben - das wird einzig und allein nach dem ersten Zeichen der Objektname bestimmt.
+
+Um etwas aus einem Package in seinem Programm zu verwenden, muss man einerseits das Package importieren und andererseits der zu verwenden Funktion den Packagenamen voranstellen. Am einfachsten ist es an einem Beispiel zu erkennen:
+
+```golang
+package main
+import (""fmt";"github.com/powiedl/mystrings")
+
+func main() {
+  fmt.Println(mystrings.Reverse("hallo Welt"))
+}
+```
+
+Im Beispiel wird also die Funktion Reverse (man beachte das große R am Anfang des Namens) auf den string "hallo welt" angewandt und das Ergebnis dieser Funktion mittels fmt.Println ausgegeben.
 
 ## Lokales übersteuern von importierten requires
 
@@ -996,9 +1009,451 @@ Damit sagt man dem Go Compiler, dass er statt dem offiziellen examplepackage auf
 
 Das funktioniert allerdings nur in einer lokalen Entwicklungsumgebung.
 
+## Go get
+
+Mit `go get {REPOSITORYLOCATION}/{USERNAME}/{REPOSITORYNAME}` lädt und installiert man ein externes Package. Dieses wird im lokalen Package cache gespeichert und steht ab sofort allen Go Programmen zur Verfügung. Im Verzeichnis, wo das eigene Programm liegt, wird eine `go.sum` Datei erstellt. In dieser trackt Go sämtliche Abhängigkeiten von dem Programm (und die Abhängigkeiten der Abhängigkeiten usw).
+
 ## Regeln für "saubere" Packages
 
 1. **Hide internal logic**: Man sollte nur die Teile exportieren (mit einem großen Anfangsbuchstaben beginnen lassen), die für die Interaktion mit dem Package absolut notwendig sind. Alles, was das Package darüber hinaus für das eigene Funktionieren benötigt, sollte nicht exportiert werden.
 2. **Don't change APIs**: Die exportierten Teile sollten (von den Signaturen) so stabil wie irgendwie möglich gehalten werden und sollten sich nur in Ausnahmefällen ändern. Für die Verwender des Packages gibt es nichts unangenehmeres, wie wenn sie jedes Mal, wenn sie eine neue Version des Packages verwenden, etwas an ihrer Verwendung des Packages ändern müssen.
 3. **Don't export functions from the main package**: Man soll keine Funktionen aus dem main Package exportieren, weil es keine Library ist.
 4. **Packages shouldn't know about dependents**: So wie ein Interface nichts über die structs wissen soll, die es implementieren soll ein Package nichts über seine Verwender wissen (müssen).
+
+# Kapitel 11 Concurrency
+
+Concurrency bezeichnet die Fähigkeit mehrere Codeteile "gleichzeitig" auszuführen. Bei einem Single Core System schaltet das Betriebssystem sehr schnell zwischen den einzelnen Teilen hin und her wodurch der Eindruck entsteht, dass die einzelnen Teile gleichzeitig passieren. Bei einem Multicoresystem können wirklich mehrere Dinge gleichzeitig ausgeführt werden (eben ein Teil pro Core) - in diesem Fall spricht man von Parallelität. Im Sprachgebrauch wird beides "vermischt" eingesetzt.
+
+Go wurde von Anfang an dafür designed Teilaufgaben parallel auszuführen. Dazu reicht es vor dem Aufruf der Funktion, die man parallel ausführen will `go` voranzustellen. Das `go` Keyword startet eine neue **Go Routine**. Die aufrufende Funktion wartet nicht auf das Ende dieser Go Routine sondern macht sofort mit der nächsten Anweisung weiter! Man kann daher nicht auf das Ergebnis der Go Routine warten indem man den Rückgabewert der Go Routine entgegennimmt. In Wahrheit macht es keinen Sinn, dass eine Go Routine einen Rückgabewert hat (es kann nur sein, dass man eine bestehende Funktion - die einen Rückgabewert hat - "parallel" ausführen will - aber dann kann man eben nicht auf den Rückgabewert dieser Funktion zugreifen).
+
+## Channels
+
+Channels sind eine typisierte, thread-sichere Queue. Über diese Channels können verschiedene Go Routinen miteinander kommunizieren. Über diese Channels kann man dann auch die "Rückgabewerte" von Funktionen zwischen unterschiedlichen Go Routinen austauschen. Die Channels sind sowohl lesend als auch schreibend blockierend, d. h. wenn eine Funktion einen Wert aus einem leeren Channel lesen will wartet sie solange, bis ein Wert im Channel auftaucht. Und wenn eine schreibende Funktion in einen vollen Channel schreiben will, wartet sie solange, bis der Channel nicht mehr voll ist (weil ein Reader eine Information entnommen hat).
+
+### Erzeugen eines Channels
+
+Wie maps und slices müssen auch Channels erzeugt werden, bevor sie benutzt werden können. Dabei wird auch der Typ festgelegt, den der Channel aufnehmen kann. Dazu dient die Funktion `make` und das Keyword `chan`: `ch := make(chan int) // erzeugt einen Channel vom Typ int mit dem Namen ch`
+
+Ein deklarierter, aber nicht initialisierter Channel hat den Wert nil (`var c chan string // c == nil`).
+
+Sowohl das Lesen aus einem nil channel als auch das Schreiben in einen nil channel blockiert für immer.
+
+### Daten an einen Channel senden
+
+Im wesentlichen gibt es zwei Operationen für einen Channel. Man kann Daten (vom richtigen Typ) hineinsenden oder man kann diese Daten daraus empfangen.
+
+`ch <- 69 // Sendet 69 in den zuvor erzeugten Channel`
+
+Der `<-` wird als Channel Operator bezeichnet und er soll die Datenflussrichtung darstellen (in dem Fall wird etwas in den Channel gesendet). Werden mehrere Werte in den Channel geschrieben, so behalten sie dort ihre Reihenfolge, d. h. der als erstes geschriebene Wert steht ganz am Anfang des Channels und danach der als zweite geschriebene usw. Das ist beim Empfangen wichtig.
+
+### Daten aus einem Channel empfangen
+
+`v := <- ch // Die Variable v wird initalisiert mit dem Wert, der im Channel "wartet"`
+
+Danach wird der Wert aus dem Channel entfernt. Wenn kein Wert im Channel vorhanden ist, wartet das Programm an dieser Stelle so lange, bis ein Wert in den Channel geschrieben wird.
+
+### Empty Channels
+
+Manchmal ist es egal, was durch einen Channel geschickt wird, es geht nur darum, dass etwas geschickt wurde. Dieses etwas kann man dann als "ich bin fertig" vom Sender interpretieren. Um das auszudrücken, verwendet man das Empfangen aus einem Channel ohne "Empfänger": `<- ch`. Durch diese Anweisung wird die Funktion an dieser Stelle angehalten, solange bis etwas aus dem Channel ch empfangen wird. Das was empfangen wird, wird sofort verworfen (es geht also nur darum, dass etwas empfangen wurde).
+
+## Buffered Channels
+
+Channels können optional gebuffert werden, d. h. sie haben Platz für mehr als ein Element. Bei einem ungebufferten Channel kann nichts mehr in den Channel gesendet werden, wenn sich ein Element darin befindet. Bei einem gebufferten Channel können sich bis zur Buffergröße Elemente im Channel befinden. Erst dann ist es nicht mehr möglich etwas in den Channel zu senden. Wenn eine Go Routine etwas in einen Buffer senden will, aber darin kein Platz ist, wartet sie solange, bis irgendetwas ein Element aus dem Channel entnimmt (womit wieder Platz für ein neues Element wird).
+
+Die Größe wird der `make` Funktion als optionaler zweiter Parameter übergeben.
+
+## Schließen eines Channels
+
+Der Sender kann den Channel explizit schließen. `close(ch) // Damit wird der Channel ch geschlossen`. Danach kann man nichts mehr in den Channel schicken. Wenn man es doch macht, kommt es zu einer **panic**. Wenn man aus einem geschlossenen Channel liest, erhält man sofort den **zero value** für den Datentyp des Channels als Ergebnis.
+
+### Kontrolle, ob ein Channel geschlossen ist
+
+Die Empfänger können prüfen, ob ein Channel geschlossen ist. Dazu gibt es beim Lesen des Channels einen zweiten Return value vom Typ `bool`. Wenn der Channel geschlossen ist, hat dieser den Wert `false`. Ein Channel wird vom Sender geschlossen, solange sich aber noch Werte im Channel befinden, die kein Empfänger empfangen hat, ist der Channel für das Auslesen noch offen. Darum ist es "sicher", wenn man beim Auslesen prüft, ob der Channel geschlossen ist.
+
+## range und Channels
+
+Man kann über Channels rangen - so wie bei Slices und Maps. Wenn nichts im Channel ist wartet range auf das nächste Element und blockiert die Verarbeitung solange. Wenn der Channel geschlossen wird, bricht range das for ab und das Programm fährt mit der Anweisung nach dem `for` Block fort. `for item := range ch { ... }`
+
+Das erleichtert das Arbeiten mit Channels "ungemein".
+
+## select
+
+Ein `select` Statement wird verwendet um gleichzeitig auf mehrere Channels zu hören. Es ähnelt einem `switch` Statement (ist aber für verschiedene Channels gedacht).
+
+```golang
+select {
+  case i,ok := <- chInts:
+    fmt.Println(i)
+  case s,ok := <- chStrings:
+    fmt.Println(s)
+}
+```
+
+Für den Channel, der einen Wert in sich ready hat, wird der case Block entsprechend ausgeführt. Wenn mehrere Channel gleichzeitig einen Wert ready haben wird zufällig aus diesen Channels **einer** gewählt und dessen Block wird ausgeführt. Im Normalfall befindet sich das select in irgendeiner Schleife, d. h. beim nächsten Durchlauf wird dann ein anderer case Block ausgeführt. Wenn das `select` aber wirklich nur einmal ausgeführt wird, bleiben die Werte in den anderen Channels "ewig" stehen.
+
+### default case
+
+Man kann in einem select auch einen default case angeben. Dieser wird ausgelöst, wenn keiner der überwachten Channels einen Wert ready hat. Er löst damit die Blockade, die das `select` sonst auf die umgebende Funktion hat.
+
+## Tickers
+
+Ticker sind spezielle Channels aus der `time` Standardbibliothek. Diese drei Ticker Funktionen sind gebräuchlich:
+
+- `time.Tick()` - liefert einen Channel, der einen Wert im angegebenen Intervall sendet (also wiederkehrend)
+- `time.After()` - liefert einen Channel, der einmalig nach dem angegebenen Intervall einen Wert sendet und sich danach schließt
+- `time.Sleep()` - Blockiert die aktuelle Go Routine für die angegebene Zeitdauer
+
+Alle drei Funktionen nehmen eine time.Duration entgegen, das ist ein Wert mit einer Zeiteinheit (Z. b. `time.Millisecond`) multipliziert. Wenn keine Zeiteinheit angegeben wird handelt es sich um Nanosekunden (wobei für mich fraglich ist, ob man so wirklich 17 Nanosekunden warten kann ...).
+
+## Readonly /Writeonly Channels
+
+Wenn man Channels als Parameter übergibt, kann man festlegen, ob dieser Channel nur gelesen oder nur geschrieben werden darf - oder im Standardfall beides.
+
+```golang
+func readch(ch <-chan int) { ... } // hierbei handelt es sich um einen Read-Only channel für die Funktion readch
+func writech(ch chan<- int) { ... } // hierbei handelt es sich um einen Write-Only channel für die Funktion writech
+```
+
+Diese explizite Klarstellung kann einerseits dem Leser helfen, zu verstehen was die Funktion mit dem Channel machen will und außerdem prüft der Go Compiler, ob man sich in der Funktion daran hält (d. h. ob man eh nicht versucht in einen Read-Only Channel zu schreiben oder umgekehrt). Es ist daher vorteilhaft immer so explizit wie möglich zu sein.
+
+# Kapitel 13 Mutexes
+
+Mutexe erlauben es den Zugriff auf Daten zu sperren. Damit können wir sicherstellen, welche Go Routine zu welcher Zeit auf bestimmte Daten zugreifen kann. In den Standardbibliotheken gibt es eine integrierte Implementierung von Mutexes - `sync.Mutex`.
+
+Dazu stellt das zwei Methoden zur Verfügung: `.Lock()` und `.Unlock()`. Zwischen `.Lock()` und `.Unlock()` kann nichts anderes auf die geschützten Daten zugreifen. Es ist gute Praxis, diesen Block in eine eigene Funktion "auszulagern" - am Anfang dieser Funktion `.Lock()` und auch gleich `defer `.Unlock()` aufzurufen und die geschützten Anweisungen eben in dieser Funktion zu kapseln.
+
+Das prinzipielle Problem, dass Mutexe lösen ist, wenn verschiedene Threads gleichzeitig auf eine geteilte Resource zugreifen wollen - wobei mindestens einer schreibend zugreifen will. Da kann es nämlich sein, dass ein lesender Thread veraltete Daten liest. Und in dem Fall wird das Go Programm eine **panic** auslösen.
+
+## Maps sind nicht thread-safe
+
+Wenn man mehrere Go Routinen hat, die auf die gleiche Map zugreifen und zumindest eine davon ändert auch die Map muss man die Map mit einem Mutex locken.
+
+## Ein Beispiel
+
+```golang
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	m := map[int]int{}
+	go writeLoop(m)
+	go readLoop(m)
+
+	// stop program from exiting, must be killed
+	block := make(chan struct{})
+	<-block
+}
+
+func writeLoop(m map[int]int) {
+	for {
+		for i := 0; i < 100; i++ {
+			m[i] = i
+		}
+	}
+}
+
+func readLoop(m map[int]int) {
+	for {
+		for k, v := range m {
+			fmt.Println(k, "-", v)
+		}
+	}
+}
+```
+
+Dieses Programm erstellt eine Map und zwei Go Routinen. Eine schreibt permanent in die Map während die zweite gleichzeitig aus der selben Map liest. Auf einer Multicore-Maschine führt das zu einem "fatal error: concurrent map iteration and map write".
+
+Um das zu lösen, muss man einen entsprechenden Mutex hinzufügen.
+
+```golang
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	m := map[int]int{}
+
+	mu := &sync.Mutex{}
+
+	go writeLoop(m, mu)
+	go readLoop(m, mu)
+
+	// stop program from exiting, must be killed
+	block := make(chan struct{})
+	<-block
+}
+
+func writeLoop(m map[int]int, mu *sync.Mutex) {
+	for {
+		for i := 0; i < 100; i++ {
+			mu.Lock()
+			m[i] = i
+			mu.Unlock()
+		}
+	}
+}
+
+func readLoop(m map[int]int, mu *sync.Mutex) {
+	for {
+		mu.Lock()
+		for k, v := range m {
+			fmt.Println(k, "-", v)
+		}
+		mu.Unlock()
+	}
+}
+```
+
+In diesem Beispiel wird der Schreibende und Lesende Zugriff auf die Map jeweils von einem Mutex "geklammert", dadurch kann nur entweder das Lesen oder das Schreiben stattfinden - und nicht beides gleichzeitig. Wichtig: Der Mutex muss dabei ein Pointer sein (darum wird er auch mit der Adresse von `sync.Mutex` initialisiert).
+
+## RW Mutex
+
+Die Standardlibrary hat auch einen RW Mutex, der zwei weitere Methoden (`.RLock()` und `.RUnlock()`) hat. Diese haben Performancevorteile bei Leseintensiven Operationen. Beliebig viele RLocks können gleichzeitig vorliegen - ohne sich gegenseitig zu stören. Aber es kann nur ein Lock aktiv sein (der andere Locks und RLocks blockiert).
+
+# Kapitel 14: Generics
+
+Generics sind "relativ" neu in Go. Obwohl Go keine Klassen kennt, hat mittlerweile das Konzept von Generics Einzug gehalten. Damit kann man den Typ von etwas wegabstrahieren - wenn es für die konkrete Aufgabe, die der jeweilige Code löst, keine Bedeutung hat. Ein Beispiel dafür wäre eine Funktion die ein slice in der Mitte in zwei halb so große slices teilt. Für diese Aufgabe ist es komplett egal, welcher Datentyp in dem slice gespeichert wird. Früher musste man denselben Code für alle benötigten Typen "1:1" wiederholen (eben nur den Typ austauschen).
+
+Generics erlauben es für Typen Variablen zu verwenden. Wie auch bei Typescript gibt man das Generic nach dem Funktionsnamen an:
+
+```golang
+func splitAnySlice[T any](s []T) ([]T, []T) {
+  mid := len(s)/2
+  return s[:mid],s[mid:]
+}
+```
+
+In diesem Beispiel hat man die Typvariable T definiert. Nach dem Funktionsnamen hat man angegeben, dass T keinen Einschränkungen unterliegt (weil es für die Funktion wirklich total egal ist, welchen Typ die einzelnen Elemente in dem Slice haben).
+
+## Warum verwendet man Generics?
+
+Generics helfen sich wiederholenden Code zu vermeiden oder zumindest zu reduzieren. Wenn sich eine bestimmte Funktionalität nicht unterscheidet, aber für unterschiedliche Datentypen benötigt wird, sind Generics die richtige Wahl. Man kann damit die Funktionalität nur einmal schreiben und für verschiedene Datentypen verwenden. Besonders in Libraries kann das von großem Vorteil sein.
+
+## Constraints
+
+Mit Constraints kann man gewisse Bedingungen definieren, die ein Typ erfüllen muss, damit er unter ein bestimmtes Generic "passt". Das kann manchmal notwendig/sinnvoll sein. Constraints sind einfach interfaces, die es erlauben, dass ein Generic eben nur für bestimmte Typen passt.
+
+### Erstellen eines Constraints
+
+Am offensichtlichsten ist es anhand eines Beispiels:
+
+```golang
+type stringer interface {
+  String() string
+}
+
+fonc concat[T stringer](vals []T)string {
+  result := ""
+  for _,val := range vals {
+    result += val.String() // hier wird die String Methode auf dem Generic verwendet, daher muss der Generic dieses Interface implementieren
+  }
+}
+```
+
+Im obigen Beispiel wird ein `interface` stringer definiert. Dieses besteht aus der Methode String(), die einen `string` zurückliefert. Die Idee dieser Methode ist, dass etwas, dass das stringer Interface implementiert eine Methode String hat, die dazu führt, dass sich das etwas als `string` darstellt.
+
+Diese Methode String wird dann in der Funktion selbst aufgerufen, d. h. das interface, muss alle spezifischen Methoden enthalten, die in der Funktion für den Generic Datentyp benötigt werden.
+
+## Interface Type Lists
+
+Seit der Einführung von Generics gibt es auch Interface Type Lists. Damit kann man eine Liste von Typen zu einem "Übertypen" zusammenfassen:
+
+```golang
+type Ordered interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64 |
+        ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+        ~float32 | ~float64 |
+        ~string
+}
+```
+
+Im Beispiel die Ordered Typen. Diese unterstützen die Vergleichsoperatoren: `<`, `<=`, `>` und `>=`
+
+## Parametrisierte Constraints
+
+Die Interface Definitionen, die als constraints verwendet werden, können selbst Typparameter haben. Im folgenden ein Beispiel für ein store interface, das ein Geschäft darstellt, dass verschiedene Produkte verkauft. Damit ein Produkt ein "gültiges" Produkt wird, muss es die Methoden Name() und Price() implementieren:
+
+```golang
+type store[P product] interface {
+	Sell(P)
+}
+
+type product interface {
+	Price() float64
+	Name() string
+}
+
+type book struct {
+	title  string
+	author string
+	price  float64
+}
+
+func (b book) Price() float64 {
+	return b.price
+}
+
+func (b book) Name() string {
+	return fmt.Sprintf("%s by %s", b.title, b.author)
+}
+
+type toy struct {
+	name  string
+	price float64
+}
+
+func (t toy) Price() float64 {
+	return t.price
+}
+
+func (t toy) Name() string {
+	return t.name
+}
+
+// The bookStore struct represents a store that sells books.
+type bookStore struct {
+	booksSold []book
+}
+
+// Sell adds a book to the bookStore's inventory.
+func (bs *bookStore) Sell(b book) {
+	bs.booksSold = append(bs.booksSold, b)
+}
+
+// The toyStore struct represents a store that sells toys.
+type toyStore struct {
+	toysSold []toy
+}
+
+// Sell adds a toy to the toyStore's inventory.
+func (ts *toyStore) Sell(t toy) {
+	ts.toysSold = append(ts.toysSold, t)
+}
+
+// sellProducts takes a store and a slice of products and sells
+// each product one by one.
+func sellProducts[P product](s store[P], products []P) {
+	for _, p := range products {
+		s.Sell(p)
+	}
+}
+
+func main() {
+	bs := bookStore{
+		booksSold: []book{},
+	}
+
+    // By passing in "book" as a type parameter, we can use the sellProducts function to sell books in a bookStore
+	sellProducts[book](&bs, []book{
+		{
+			title:  "The Hobbit",
+			author: "J.R.R. Tolkien",
+			price:  10.0,
+		},
+		{
+			title:  "The Lord of the Rings",
+			author: "J.R.R. Tolkien",
+			price:  20.0,
+		},
+	})
+	fmt.Println(bs.booksSold)
+
+    // We can then do the same for toys
+	ts := toyStore{
+		toysSold: []toy{},
+	}
+	sellProducts[toy](&ts, []toy{
+		{
+			name:  "Lego",
+			price: 10.0,
+		},
+		{
+			name:  "Barbie",
+			price: 20.0,
+		},
+	})
+	fmt.Println(ts.toysSold)
+}
+```
+
+# Kapitel 15: Enums
+
+In Go gibt es keine Enums.
+
+Das, was einem `Union Type` in Typescript am nächsten kommt ist:
+
+```golang
+type sendingChannel string // hier definieren wir einen Type Alias für string sendingChannel
+
+const (
+  Email sendingChannel = "email"
+  SMS   sendingChannel = "sms"
+  Phone sendingChannel = "phone"
+)
+
+func sendNotification(ch sendingChannel, message string) {
+  // send the message
+}
+```
+
+Damit verhindert Go, dass wir dieses Programm schreiben:
+
+```golang
+sendingCh := "slack"
+sendNotification(sendingCh, "hello") // string is not sendingChannel
+```
+
+Aber es verhindert nicht, dass wir das schreiben: `sendNotification("slack","hello")` und es verhindert ebenfalls nicht folgendes:
+
+```golang
+sendingCh := "slack"
+convertedSendingCh := sendingChannel(sendingCh)
+sendNotification(convertedSendingCh, "hello")
+```
+
+## Iota
+
+Iota ist ein Go Feature, dass in einem const block jeder Konstanten den nächsten int Wert zuweist. Es beginnt mit 0 bei der ersten Konstanten. Dort - und nur dort - wird auch das Keyword `iota` als Wert für die Konstante verwendet:
+
+```golang
+type sendingChannel int
+const (
+  Email sendingChannel = iota
+  SMS
+  Phone
+)
+```
+
+In dem Beispiel bekommt Email den Wert 0, SMS den Wert 1 und Phone den Wert 2.
+
+# Kapitel 16: Quiz
+
+Die **Go Proverbs** sind eine Kollektion von guten Ratschlägen von Rob Pike, einem der Erfinder von Go:
+
+- Don't communicate by sharing memory, share memory by communicating. (man sollte eher Channels als Mutexe verwenden, wenn man Daten zwischen Teilen seines Programms teilen will)
+- Concurrency is not parallelism.
+- Channels orchestrate; mutexes serialize (verwandt mit dem ersten Proverb - Channels steuern den Datenfluss im eigenen Programm, Mutexe führen dazu, dass Dinge hintereinander ausgeführt werden)
+- The bigger the interface, the weaker the abstraction.
+- Make the zero value useful.
+- interface{} says nothing. (da alles dem empty Interface genügt, hat es keinerlei Aussagekraft - ähnlich wie any in Typescript )
+- Gofmt's style is no one's favorite, yet gofmt is everyone's favorite. (das ist ein integrierter Bestandteil des Go Ecosystems, darum verwendet es jeder. Und weil es jeder verwendet, schaut jeder Go Code "gleich" aus - auch wenn nicht jeder mit dem Aussehen 100% glücklich ist)
+- A little copying is better than a little dependency (Im Gegensatz zu Javascript, wo das node_modules Verzeichnis viel größer als der eigentliche Applikationscode sein kann, ist es bei Go genau umgekehrt - weil nur das, was man unbedingt braucht Teil des Programms wird).
+- Syscall must always be guarded with build tags.
+- Cgo must always be guarded with build tags.
+- Cgo is not Go.
+- With the unsafe package there are no guarantees.
+- Clear is better than clever (Code wird für Menschen geschrieben, nicht für Maschinen, daher sollte er möglichst klar und "einfach" sein).
+- Reflection is never clear.
+- Errors are values.
+- Don't just check errors, handle them gracefully.
+- Design the architecture, name the components, document the details.
+- Documentation is for users. (der Code selbst sollte so klar geschrieben sein, dass er sich selbst erklärt. Die Dokumentation sollte eher für die Anwender gedacht sein - wie man das Programm verwendet, nicht für den Maintainer des Programms der den Source Code im Zugriff hat)
+- Don't panic.
+
+Auch wenn ich bei weitem nicht alle verstehe ... vielleicht kommt das in weiterer Folge noch.
